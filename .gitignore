@@ -1,0 +1,107 @@
+# ========================
+# Python
+# ========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+*.manifest
+*.spec
+
+# ========================
+# Node.js / Frontend
+# ========================
+node_modules/
+web/dist/
+web/.vite/
+*.tsbuildinfo
+
+# ========================
+# IDEs & Editors
+# ========================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+*.sublime-project
+
+# ========================
+# OS Files
+# ========================
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ========================
+# Environment & Secrets
+# ========================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+
+# ========================
+# Database
+# ========================
+*.db
+*.sqlite
+*.sqlite3
+
+# ========================
+# Client Artifacts
+# ========================
+client/*.exe
+client/dist/
+client/build/
+client/*.spec
+client/src/*.spec
+client/client.uuid
+
+# ========================
+# Server Artifacts
+# ========================
+server/uploads/
+server/alembic/versions/*.pyc
+server/smart_backup.db
+
+# ========================
+# Docker
+# ========================
+docker-compose.override.yml
+
+# ========================
+# Logs
+# ========================
+*.log
+logs/
+server/logs/
+client/logs/
+
+# ========================
+# Coverage & Testing
+# ========================
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+.tox/
+
+# ========================
+# Misc
+# ========================
+*.tmp
+*.temp
