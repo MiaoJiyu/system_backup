@@ -101,7 +101,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft } from 'lucide-vue-next'
 import { getClient, getClientBackups, getEffectivePolicy, pushClientConfig } from '@/api/clients'

@@ -26,7 +26,7 @@ async def list_clients(
     db: AsyncSession = Depends(get_db),
     _=Depends(require_auth),
 ):
-    stmt = select(Client).options(selectinload(Client.group), selectinload(Client.user)).order_by(Client.last_seen.desc().nullslast())
+    stmt = select(Client).options(selectinload(Client.group), selectinload(Client.user)).order_by(Client.last_seen.desc())
     count_base = select(func.count()).select_from(Client)
 
     if search:
@@ -161,7 +161,7 @@ async def get_client_backups(
     db: AsyncSession = Depends(get_db),
     _=Depends(require_auth),
 ):
-    stmt = select(BackupRecord).where(BackupRecord.client_id == client_id).order_by(BackupRecord.started_at.desc().nullslast())
+    stmt = select(BackupRecord).where(BackupRecord.client_id == client_id).order_by(BackupRecord.started_at.desc())
     count_stmt = select(func.count()).select_from(BackupRecord).where(BackupRecord.client_id == client_id)
     pg = Pagination(page, page_size)
     return await paginate(db, stmt, pg, count_stmt)

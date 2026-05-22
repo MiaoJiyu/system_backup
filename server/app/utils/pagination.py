@@ -24,7 +24,10 @@ async def paginate(
     pagination: Pagination,
     count_stmt: Select | None = None,
 ) -> dict:
-    total = await session.scalar(count_stmt or select(func.count()).select_from(stmt.subquery()))
+    if count_stmt is not None:
+        total = await session.scalar(count_stmt)
+    else:
+        total = await session.scalar(select(func.count()).select_from(stmt.subquery()))
     items_result = await session.execute(stmt.offset(pagination.offset).limit(pagination.limit))
     items = items_result.scalars().all()
     total_pages = ceil(total / pagination.page_size) if total else 0

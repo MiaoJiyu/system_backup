@@ -72,7 +72,7 @@ async def list_group_clients(
         select(Client)
         .options(selectinload(Client.group), selectinload(Client.user))
         .where(Client.group_id == group_id)
-        .order_by(Client.last_seen.desc().nullslast())
+        .order_by(Client.last_seen.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
     )

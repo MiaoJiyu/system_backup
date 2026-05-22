@@ -18,7 +18,7 @@ async def list_backups(
     db: AsyncSession = Depends(get_db),
     _=Depends(require_auth),
 ):
-    stmt = select(BackupRecord).order_by(BackupRecord.started_at.desc().nullslast())
+    stmt = select(BackupRecord).order_by(BackupRecord.started_at.desc())
     count_stmt = select(func.count()).select_from(BackupRecord)
     if client_id:
         stmt = stmt.where(BackupRecord.client_id == client_id)
