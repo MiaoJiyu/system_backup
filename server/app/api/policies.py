@@ -110,7 +110,34 @@ async def list_assignments(db: AsyncSession = Depends(get_db), _=Depends(require
     tags = await db.execute(select(TagPolicy).options(selectinload(TagPolicy.tag), selectinload(TagPolicy.policy_template)))
     clients = await db.execute(select(ClientPolicyOverride).options(selectinload(ClientPolicyOverride.client), selectinload(ClientPolicyOverride.policy_template)))
     return {
-        "group_assignments": [{"id": g.id, "group": g.group.name if g.group else None, "policy": g.policy_template.name if g.policy_template else None} for g in groups.scalars().all()],
-        "tag_assignments": [{"id": t.id, "tag": t.tag.name if t.tag else None, "policy": t.policy_template.name if t.policy_template else None} for t in tags.scalars().all()],
-        "client_overrides": [{"id": c.id, "client_uuid": c.client.uuid[:16] if c.client else None, "policy": c.policy_template.name if c.policy_template else None} for c in clients.scalars().all()],
+        "group_assignments": [{"id": g.id, "group_id": g.group_id, "group": g.group.name if g.group else None, "policy_id": g.policy_template_id, "policy": g.policy_template.name if g.policy_template else None} for g in groups.scalars().all()],
+        "tag_assignments": [{"id": t.id, "tag_id": t.tag_id, "tag": t.tag.name if t.tag else None, "policy_id": t.policy_template_id, "policy": t.policy_template.name if t.policy_template else None} for t in tags.scalars().all()],
+        "client_overrides": [{"id": c.id, "client_id": c.client_id, "client_uuid": c.client.uuid[:16] if c.client else None, "policy_id": c.policy_template_id, "policy": c.policy_template.name if c.policy_template else None} for c in clients.scalars().all()],
     }
+
+
+@router.delete("/assignments/group/{assignment_id}", status_code=204)
+async def remove_group_assignment(assignment_id: int, db: AsyncSession = Depends(get_db), _=Depends(require_admin)):
+    gp = await db.get(GroupPolicy, assignment_id)
+    if not gp:
+        raise HTTPException(404, "分配记录不存在")
+    await db.delete(gp)
+    await db.commit()
+
+
+@router.delete("/assignments/tag/{assignment_id}", status_code=204)
+async def remove_tag_assignment(assignment_id: int, db: AsyncSession = Depends(get_db), _=Depends(require_admin)):
+    tp = await db.get(TagPolicy, assignment_id)
+    if not tp:
+        raise HTTPException(404, "分配记录不存在")
+    await db.delete(tp)
+    await db.commit()
+
+
+@router.delete("/assignments/client/{assignment_id}", status_code=204)
+async def remove_client_assignment(assignment_id: int, db: AsyncSession = Depends(get_db), _=Depends(require_admin)):
+    co = await db.get(ClientPolicyOverride, assignment_id)
+    if not co:
+        raise HTTPException(404, "分配记录不存在")
+    await db.delete(co)
+    await db.commit()

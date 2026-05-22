@@ -35,3 +35,9 @@ class CredentialRequest(BaseModel):
     storage_id: int
     path: str
     file_size: int = 0
+
+
+class ClientConfigRequest(BaseModel):
+    """Override config fields to push to a specific client."""
+    config: dict = Field(default_factory=dict)
+    policy_template_id: int | None = None

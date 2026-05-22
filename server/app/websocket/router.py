@@ -13,9 +13,9 @@ async def websocket_endpoint(ws: WebSocket, uuid: str = Query(...)):
             data = await ws.receive_text()
             await handle_message(ws, data)
     except WebSocketDisconnect:
-        manager.disconnect(ws)
+        await manager.disconnect(ws)
     except Exception:
-        manager.disconnect(ws)
+        await manager.disconnect(ws)
 
 
 async def ws_logs_endpoint(ws: WebSocket, client_id: int):

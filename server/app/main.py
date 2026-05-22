@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -8,12 +9,29 @@ from app.services.auth_service import ensure_admin_exists
 settings = get_settings()
 
 
+async def run_heartbeat_checker():
+    """Background task: periodically check client heartbeats and mark offline."""
+    from app.websocket.manager import manager
+    while True:
+        try:
+            await manager.check_heartbeats()
+        except Exception:
+            pass
+        await asyncio.sleep(15)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     async with AsyncSessionLocal() as db:
         await ensure_admin_exists(db)
+    heartbeat_task = asyncio.create_task(run_heartbeat_checker())
     yield
+    heartbeat_task.cancel()
+    try:
+        await heartbeat_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(
@@ -55,6 +73,7 @@ app.include_router(storages.router, prefix="/api/v1")
 app.include_router(versions.router, prefix="/api/v1")
 app.include_router(backups.router, prefix="/api/v1")
 app.include_router(system.router, prefix="/api/v1")
+app.include_router(auth.users_router, prefix="/api/v1")
 
 # Register WebSocket endpoints
 from app.websocket.router import websocket_endpoint

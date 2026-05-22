@@ -7,7 +7,7 @@ from app.database import get_db
 from app.models.client import Client, ClientStatus
 from app.models.client_log import ClientLog, LogLevel
 from app.models.backup_record import BackupRecord
-from app.schemas.client import ClientUpdate, ClientResponse, CommandRequest
+from app.schemas.client import ClientUpdate, ClientResponse, CommandRequest, ClientConfigRequest
 from app.middleware.auth import require_auth, require_admin
 from app.services.policy_engine import calculate_effective_policy
 from app.utils.pagination import Pagination, paginate
@@ -93,6 +93,46 @@ async def send_command(client_id: int, data: CommandRequest, db: AsyncSession = 
         "payload": data.payload or {},
     })
     return {"message": f"指令 {data.command} 已发送"}
+
+
+@router.patch("/{client_id}/config")
+async def push_client_config(client_id: int, data: ClientConfigRequest, db: AsyncSession = Depends(get_db), _=Depends(require_admin)):
+    """Save override config for a client and push via WebSocket."""
+    from app.websocket.manager import manager
+    from app.models.policy_assignment import ClientPolicyOverride
+
+    client = await db.get(Client, client_id)
+    if not client:
+        raise HTTPException(404, "客户端不存在")
+
+    # Upsert ClientPolicyOverride
+    result = await db.execute(
+        select(ClientPolicyOverride).where(ClientPolicyOverride.client_id == client_id)
+    )
+    override = result.scalar_one_or_none()
+    if override:
+        if data.policy_template_id is not None:
+            override.policy_template_id = data.policy_template_id
+        if data.config:
+            override.override_config = data.config
+    else:
+        override = ClientPolicyOverride(
+            client_id=client_id,
+            policy_template_id=data.policy_template_id,
+            override_config=data.config if data.config else None,
+        )
+        db.add(override)
+
+    await db.commit()
+
+    # Recalculate and push effective policy
+    policy = await calculate_effective_policy(db, client_id)
+    await manager.send_to_client(client.uuid, {
+        "type": "config_update",
+        "payload": policy,
+    })
+
+    return {"message": "配置已保存并推送", "effective_policy": policy}
 
 
 @router.get("/{client_id}/logs")

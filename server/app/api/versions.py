@@ -1,5 +1,6 @@
 import os
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
+from fastapi.responses import FileResponse
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -82,6 +83,23 @@ async def delete_version(version_id: int, db: AsyncSession = Depends(get_db), _=
         os.remove(file_path)
     await db.delete(ver)
     await db.commit()
+
+
+@router.get("/download/{version}")
+async def download_version(version: str, db: AsyncSession = Depends(get_db)):
+    """Download a client version file."""
+    result = await db.execute(select(ClientVersion).where(ClientVersion.version == version))
+    ver = result.scalar_one_or_none()
+    if not ver:
+        raise HTTPException(404, "版本不存在")
+    file_path = os.path.join(settings.UPLOAD_DIR, ver.file_name or f"client-{version}.exe")
+    if not os.path.exists(file_path):
+        raise HTTPException(404, "文件不存在，可能已被删除")
+    return FileResponse(
+        path=file_path,
+        filename=ver.file_name,
+        media_type="application/octet-stream",
+    )
 
 
 @router.post("/{version_id}/push")

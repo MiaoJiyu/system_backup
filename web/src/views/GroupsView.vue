@@ -50,24 +50,60 @@
           <span v-for="p in boundPolicies" :key="p.id" class="badge badge-info">{{ p.name }}</span>
         </div>
         <p v-else class="text-sm text-gray-400">暂无绑定策略</p>
+
+        <el-divider />
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="text-sm font-medium text-gray-700">组内客户端 ({{ groupClients.length }})</h4>
+          <el-button size="small" type="primary" @click="showAddClientsDialog = true" :disabled="!selectedGroup">
+            <Plus class="w-3 h-3" /> 添加客户端
+          </el-button>
+        </div>
+        <div v-if="groupClients.length" class="space-y-1 max-h-60 overflow-y-auto">
+          <div v-for="c in groupClients" :key="c.id" class="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg text-sm">
+            <span class="font-mono text-xs text-gray-600">{{ c.uuid?.substring(0, 12) }}...</span>
+            <el-button link type="danger" size="small" @click="handleRemoveClient(c)">移除</el-button>
+          </div>
+        </div>
+        <p v-else class="text-sm text-gray-400">暂无客户端</p>
       </div>
       <div v-else class="text-center text-gray-400 pt-20">请选择左侧分组查看详情</div>
+
+    <!-- Add clients dialog -->
+    <el-dialog v-model="showAddClientsDialog" title="添加客户端到分组" width="550px">
+      <el-transfer
+        v-model="selectedClientIds"
+        :data="availableClientOptions"
+        :titles="['可选客户端', '已选择']"
+        filterable
+      />
+      <template #footer>
+        <el-button @click="showAddClientsDialog = false">取消</el-button>
+        <el-button type="primary" @click="confirmAddClients" :loading="addingClients">确定</el-button>
+      </template>
+    </el-dialog>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, FolderTree } from 'lucide-vue-next'
-import { getGroups, createGroup, updateGroup, deleteGroup } from '@/api/groups'
-import type { Group } from '@/types'
+import { getGroups, createGroup, updateGroup, deleteGroup, getGroupClients, addClientsToGroup, removeClientFromGroup } from '@/api/groups'
+import { getClients } from '@/api/clients'
+import { getAssignments } from '@/api/policies'
+import type { Group, Client } from '@/types'
 
 const treeData = ref<Group[]>([])
 const selectedGroup = ref<Group | null>(null)
 const boundPolicies = ref<any[]>([])
 const saving = ref(false)
 const form = ref({ name: '', description: '', parent_id: null as number | null })
+const groupClients = ref<Client[]>([])
+const showAddClientsDialog = ref(false)
+const selectedClientIds = ref<number[]>([])
+const availableClientOptions = ref<{ key: number; label: string }[]>([])
+const addingClients = ref(false)
 
 const flatGroups = computed(() => {
   const result: Group[] = []
@@ -97,9 +133,61 @@ function buildTree(groups: Group[]): Group[] {
   return roots
 }
 
-function onSelect(data: Group) {
+async function onSelect(data: Group) {
   selectedGroup.value = data
   form.value = { name: data.name, description: data.description || '', parent_id: data.parent_id }
+  await Promise.all([loadGroupClients(), loadBoundPolicies()])
+}
+
+async function loadBoundPolicies() {
+  if (!selectedGroup.value) return
+  try {
+    const all = await getAssignments()
+    boundPolicies.value = (all.group_assignments || [])
+      .filter((a: any) => a.group_id === selectedGroup.value!.id)
+      .map((a: any) => ({ id: a.id, name: a.policy }))
+  } catch { boundPolicies.value = [] }
+}
+
+async function loadGroupClients() {
+  if (!selectedGroup.value) return
+  try {
+    groupClients.value = await getGroupClients(selectedGroup.value.id)
+  } catch { groupClients.value = [] }
+}
+
+async function handleRemoveClient(c: Client) {
+  if (!selectedGroup.value) return
+  try {
+    await removeClientFromGroup(selectedGroup.value.id, c.id)
+    ElMessage.success('已移除')
+    await loadGroupClients()
+  } catch { ElMessage.error('移除失败') }
+}
+
+function onShowAddClientsDialog() {
+  // Load available clients for transfer
+  getClients({ page_size: 200 }).then(res => {
+    availableClientOptions.value = res.items
+      .filter((c: Client) => c.group_id !== selectedGroup.value?.id)
+      .map((c: Client) => ({ key: c.id, label: `${c.uuid?.substring(0, 8)}... (${c.ip_address || 'unknown'})` }))
+  }).catch(() => {})
+}
+
+async function confirmAddClients() {
+  if (!selectedGroup.value || selectedClientIds.value.length === 0) {
+    ElMessage.warning('请选择客户端')
+    return
+  }
+  addingClients.value = true
+  try {
+    await addClientsToGroup(selectedGroup.value.id, selectedClientIds.value)
+    ElMessage.success('客户端已添加')
+    showAddClientsDialog.value = false
+    selectedClientIds.value = []
+    await loadGroupClients()
+  } catch { ElMessage.error('添加失败') }
+  finally { addingClients.value = false }
 }
 
 async function addGroup(parentId: number | null) {
@@ -142,6 +230,10 @@ async function fetchGroups() {
     treeData.value = buildTree(data)
   } catch { console.error('Failed to fetch groups') }
 }
+
+watch(showAddClientsDialog, (val) => {
+  if (val) onShowAddClientsDialog()
+})
 
 onMounted(fetchGroups)
 </script>

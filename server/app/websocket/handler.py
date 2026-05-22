@@ -33,6 +33,7 @@ async def handle_message(ws: WebSocket, raw: str):
         "backup_status": handle_backup_status,
         "config_ack": handle_config_ack,
         "version_check": handle_version_check,
+        "request_config": handle_request_config,
     }
 
     handler = handlers.get(msg_type)
@@ -258,4 +259,21 @@ async def handle_version_check(ws: WebSocket, payload: dict, request_id: str | N
                     "file_size": latest.file_size,
                     "changelog": latest.changelog,
                 },
+            })
+
+
+async def handle_request_config(ws: WebSocket, payload: dict, request_id: str | None):
+    """Client requests its latest effective policy."""
+    uuid = manager.get_uuid(ws)
+    if not uuid:
+        return
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(Client).where(Client.uuid == uuid))
+        client = result.scalar_one_or_none()
+        if client and client.id:
+            policy = await calculate_effective_policy(db, client.id)
+            await manager.send_to_client(uuid, {
+                "type": "config_update",
+                "request_id": request_id,
+                "payload": policy,
             })

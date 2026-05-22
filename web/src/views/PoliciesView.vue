@@ -58,6 +58,27 @@
           <el-button type="danger" @click="deletePolicy" :loading="deleting">删除</el-button>
         </el-form-item>
       </el-form>
+
+      <el-divider />
+      <h4 class="text-sm font-medium text-gray-700 mb-3">策略分配</h4>
+      <div class="flex items-center gap-2 mb-3">
+        <el-select v-model="assignType" class="w-24" size="small">
+          <el-option label="分组" value="group" />
+          <el-option label="标签" value="tag" />
+          <el-option label="客户端" value="client" />
+        </el-select>
+        <el-select v-model="assignTargetId" class="w-48" size="small" filterable placeholder="选择目标">
+          <el-option v-for="t in assignOptions" :key="t.id" :label="t.label" :value="t.id" />
+        </el-select>
+        <el-button size="small" type="primary" @click="handleAssign" :loading="assigning">分配</el-button>
+      </div>
+      <div v-if="assignments.length" class="space-y-1 max-h-60 overflow-y-auto">
+        <div v-for="a in assignments" :key="a.id" class="flex items-center justify-between px-3 py-1.5 bg-gray-50 rounded text-sm">
+          <span class="text-gray-600">{{ a.label }}</span>
+          <el-button link type="danger" size="small" @click="handleRemoveAssign(a)">移除</el-button>
+        </div>
+      </div>
+      <p v-else class="text-sm text-gray-400">暂无分配</p>
     </div>
     <div v-else class="card flex-1 flex items-center justify-center text-gray-400">请选择左侧策略模板</div>
   </div>
@@ -67,8 +88,10 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from 'lucide-vue-next'
-import { getPolicies, createPolicy, updatePolicy, deletePolicy as delPolicy } from '@/api/policies'
+import { getPolicies, createPolicy, updatePolicy, deletePolicy as delPolicy, assignPolicy, getAssignments, removeAssignment } from '@/api/policies'
 import { getStorages } from '@/api/storages'
+import { getGroups } from '@/api/groups'
+import { getClients } from '@/api/clients'
 import type { PolicyTemplate, Storage } from '@/types'
 
 const policies = ref<PolicyTemplate[]>([])
@@ -76,6 +99,11 @@ const storages = ref<Storage[]>([])
 const selected = ref<PolicyTemplate | null>(null)
 const saving = ref(false)
 const deleting = ref(false)
+const assigning = ref(false)
+const assignType = ref('group')
+const assignTargetId = ref<number | null>(null)
+const assignOptions = ref<{ id: number; label: string }[]>([])
+const assignments = ref<any[]>([])
 
 const form = reactive<Record<string, any>>({
   name: '', description: '', backup_directories: [], backup_usb: true,
@@ -95,6 +123,8 @@ function selectPolicy(p: PolicyTemplate) {
     server_port: p.server_port, encryption_enabled: p.encryption_enabled,
     compression_enabled: p.compression_enabled, version_update_policy: p.version_update_policy,
   })
+  loadAssignments()
+  loadAssignOptions()
 }
 
 async function addPolicy() {
@@ -117,6 +147,61 @@ async function savePolicy() {
     ElMessage.success('已保存')
   } catch { ElMessage.error('保存失败') }
   finally { saving.value = false }
+}
+
+async function loadAssignments() {
+  if (!selected.value) return
+  try {
+    const all = await getAssignments()
+    const pid = selected.value.id
+    assignments.value = [
+      ...(all.group_assignments || []).filter((a: any) => a.policy_id === pid).map((a: any) => ({ ...a, type: 'group', label: `分组: ${a.group}` })),
+      ...(all.tag_assignments || []).filter((a: any) => a.policy_id === pid).map((a: any) => ({ ...a, type: 'tag', label: `标签: ${a.tag}` })),
+      ...(all.client_overrides || []).filter((a: any) => a.policy_id === pid).map((a: any) => ({ ...a, type: 'client', label: `客户端: ${a.client_uuid}` })),
+    ]
+  } catch { assignments.value = [] }
+}
+
+async function loadAssignOptions() {
+  try {
+    if (assignType.value === 'group') {
+      const gs = await getGroups()
+      assignOptions.value = gs.map((g: any) => ({ id: g.id, label: g.name }))
+    } else if (assignType.value === 'client') {
+      const cs = await getClients({ page_size: 200 })
+      assignOptions.value = cs.items.map((c: any) => ({ id: c.id, label: `${c.uuid?.substring(0, 8)}... (${c.ip_address || '?'})` }))
+    } else {
+      assignOptions.value = []
+    }
+  } catch { assignOptions.value = [] }
+}
+
+async function handleAssign() {
+  if (!selected.value || !assignTargetId.value) {
+    ElMessage.warning('请选择目标')
+    return
+  }
+  assigning.value = true
+  try {
+    const payload: any = { policy_template_id: selected.value.id }
+    if (assignType.value === 'group') payload.group_id = assignTargetId.value
+    else if (assignType.value === 'tag') payload.tag_id = assignTargetId.value
+    else payload.client_id = assignTargetId.value
+    await assignPolicy(payload)
+    ElMessage.success('策略已分配')
+    assignTargetId.value = null
+    await loadAssignments()
+  } catch { ElMessage.error('分配失败') }
+  finally { assigning.value = false }
+}
+
+async function handleRemoveAssign(a: any) {
+  try { await ElMessageBox.confirm('确定移除此分配？', '确认', { type: 'warning' }) } catch { return }
+  try {
+    await removeAssignment(a.type, a.id)
+    ElMessage.success('已移除')
+    await loadAssignments()
+  } catch { ElMessage.error('移除失败') }
 }
 
 async function deletePolicy() {

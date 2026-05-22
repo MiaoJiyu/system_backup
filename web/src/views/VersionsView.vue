@@ -24,9 +24,10 @@
             </el-tooltip>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="handlePush(row)">推送更新</el-button>
+            <el-button link type="success" size="small" @click="downloadVersion(row)">下载</el-button>
             <el-button link type="primary" size="small" @click="editMirror(row)">镜像</el-button>
             <el-button link type="danger" size="small" @click="handleDelete(row)">删除</el-button>
           </template>
@@ -129,6 +130,17 @@ async function confirmMirror() {
     mirrorDialogVisible.value = false
     await fetchVersions()
   } catch { ElMessage.error('更新失败') }
+}
+
+function downloadVersion(row: ClientVersion) {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
+  const url = `${baseUrl}/api/v1/versions/download/${row.version}`
+  const a = document.createElement('a')
+  a.href = url
+  a.download = row.file_name || `client-${row.version}.exe`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
 }
 
 async function handleDelete(row: ClientVersion) {

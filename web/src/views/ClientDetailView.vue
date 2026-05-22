@@ -62,7 +62,38 @@
         </el-tab-pane>
 
         <el-tab-pane label="生效策略" name="policy">
-          <pre class="bg-gray-50 rounded-lg p-4 text-sm overflow-auto max-h-80">{{ JSON.stringify(effectivePolicy, null, 2) || '暂无策略' }}</pre>
+          <div v-if="editingPolicy" class="space-y-4">
+            <el-form :model="policyForm" label-width="120px" size="default">
+              <el-form-item label="备份目录">
+                <el-select v-model="policyForm.backup_directories" multiple filterable allow-create placeholder="输入路径后回车添加" class="w-full" />
+              </el-form-item>
+              <el-form-item label="备份U盘"><el-switch v-model="policyForm.backup_usb" /></el-form-item>
+              <el-form-item label="增量备份"><el-switch v-model="policyForm.incremental" /></el-form-item>
+              <el-form-item label="定时类型">
+                <el-select v-model="policyForm.schedule_type" class="w-40">
+                  <el-option label="手动" value="manual" />
+                  <el-option label="Cron表达式" value="cron" />
+                  <el-option label="间隔" value="interval" />
+                </el-select>
+              </el-form-item>
+              <el-form-item v-if="policyForm.schedule_type === 'cron'" label="Cron表达式">
+                <el-input v-model="policyForm.schedule_config.cron" placeholder="0 */6 * * *" class="max-w-xs" />
+              </el-form-item>
+              <el-form-item v-if="policyForm.schedule_type === 'interval'" label="间隔(秒)">
+                <el-input-number v-model="policyForm.schedule_config.interval_seconds" :min="60" class="max-w-xs" />
+              </el-form-item>
+              <el-form-item label="加密"><el-switch v-model="policyForm.encryption_enabled" /></el-form-item>
+              <el-form-item label="压缩"><el-switch v-model="policyForm.compression_enabled" /></el-form-item>
+              <el-form-item>
+                <el-button type="primary" @click="savePolicy" :loading="savingPolicy">保存并推送</el-button>
+                <el-button @click="editingPolicy = false">取消</el-button>
+              </el-form-item>
+            </el-form>
+          </div>
+          <div v-else>
+            <el-button type="primary" size="small" class="mb-3" @click="startEditPolicy">编辑策略</el-button>
+            <pre class="bg-gray-50 rounded-lg p-4 text-sm overflow-auto max-h-80">{{ JSON.stringify(effectivePolicy, null, 2) || '暂无策略' }}</pre>
+          </div>
         </el-tab-pane>
       </el-tabs>
     </div>
@@ -73,9 +104,10 @@
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft } from 'lucide-vue-next'
-import { getClient, getClientBackups, getEffectivePolicy } from '@/api/clients'
+import { getClient, getClientBackups, getEffectivePolicy, pushClientConfig } from '@/api/clients'
 import { useWebSocketStore } from '@/stores/websocket'
 import type { Client, BackupRecord } from '@/types'
+import { ElMessage } from 'element-plus'
 
 const route = useRoute()
 const ws = useWebSocketStore()
@@ -85,6 +117,13 @@ const effectivePolicy = ref<Record<string, any> | null>(null)
 const loading = ref(true)
 const activeTab = ref('logs')
 const logContainer = ref<HTMLElement>()
+const editingPolicy = ref(false)
+const savingPolicy = ref(false)
+const policyForm = reactive<Record<string, any>>({
+  backup_directories: [], backup_usb: true, incremental: true,
+  schedule_type: 'manual', schedule_config: {}, encryption_enabled: true,
+  compression_enabled: true,
+})
 
 const id = Number(route.params.id)
 
@@ -122,4 +161,34 @@ onMounted(async () => {
 onUnmounted(() => {
   ws.disconnect()
 })
+
+function startEditPolicy() {
+  if (effectivePolicy.value) {
+    Object.assign(policyForm, {
+      backup_directories: effectivePolicy.value.backup_directories || [],
+      backup_usb: effectivePolicy.value.backup_usb ?? true,
+      incremental: effectivePolicy.value.incremental ?? true,
+      schedule_type: effectivePolicy.value.schedule_type || 'manual',
+      schedule_config: effectivePolicy.value.schedule_config || {},
+      encryption_enabled: effectivePolicy.value.encryption_enabled ?? true,
+      compression_enabled: effectivePolicy.value.compression_enabled ?? true,
+    })
+  }
+  editingPolicy.value = true
+}
+
+async function savePolicy() {
+  if (!client.value) return
+  savingPolicy.value = true
+  try {
+    const res = await pushClientConfig(client.value.id, { config: { ...policyForm } })
+    effectivePolicy.value = res.effective_policy
+    editingPolicy.value = false
+    ElMessage.success('配置已保存并推送到客户端')
+  } catch {
+    ElMessage.error('保存失败')
+  } finally {
+    savingPolicy.value = false
+  }
+}
 </script>

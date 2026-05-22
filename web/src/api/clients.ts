@@ -32,3 +32,7 @@ export function getClientBackups(id: number, params?: Record<string, any>): Prom
 export function getEffectivePolicy(id: number): Promise<Record<string, any>> {
   return request.get(`/clients/${id}/effective-policy`)
 }
+
+export function pushClientConfig(id: number, data: { config?: Record<string, any>; policy_template_id?: number }): Promise<any> {
+  return request.patch(`/clients/${id}/config`, data)
+}

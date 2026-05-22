@@ -19,11 +19,24 @@ class ConnectionManager:
         self.connections[uuid] = {"ws": ws, "ip": ip, "user_id": None, "last_heartbeat": datetime.now(timezone.utc)}
         self._ws_to_uuid[id(ws)] = uuid
 
-    def disconnect(self, ws: WebSocket):
+    async def disconnect(self, ws: WebSocket):
         ws_id = id(ws)
         uuid = self._ws_to_uuid.pop(ws_id, None)
         if uuid:
             self.connections.pop(uuid, None)
+            # Update database status to offline
+            try:
+                from sqlalchemy import select
+                from app.database import AsyncSessionLocal
+                from app.models.client import Client, ClientStatus
+                async with AsyncSessionLocal() as db:
+                    result = await db.execute(select(Client).where(Client.uuid == uuid))
+                    client = result.scalar_one_or_none()
+                    if client:
+                        client.status = ClientStatus.offline
+                        await db.commit()
+            except Exception:
+                pass
 
     def get_uuid(self, ws: WebSocket) -> str | None:
         return self._ws_to_uuid.get(id(ws))
