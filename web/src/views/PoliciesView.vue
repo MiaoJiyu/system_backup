@@ -75,7 +75,10 @@
       <div v-if="assignments.length" class="space-y-1 max-h-60 overflow-y-auto">
         <div v-for="a in assignments" :key="a.id" class="flex items-center justify-between px-3 py-1.5 bg-gray-50 rounded text-sm">
           <span class="text-gray-600">{{ a.label }}</span>
-          <el-button link type="danger" size="small" @click="handleRemoveAssign(a)">移除</el-button>
+          <div class="flex gap-1">
+            <el-button link type="success" size="small" @click="handleBackupAssign(a)">执行</el-button>
+            <el-button link type="danger" size="small" @click="handleRemoveAssign(a)">移除</el-button>
+          </div>
         </div>
       </div>
       <p v-else class="text-sm text-gray-400">暂无分配</p>
@@ -91,7 +94,7 @@ import { Plus } from 'lucide-vue-next'
 import { getPolicies, createPolicy, updatePolicy, deletePolicy as delPolicy, assignPolicy, getAssignments, removeAssignment } from '@/api/policies'
 import { getStorages } from '@/api/storages'
 import { getGroups } from '@/api/groups'
-import { getClients } from '@/api/clients'
+import { getClients, sendCommand } from '@/api/clients'
 import type { PolicyTemplate, Storage } from '@/types'
 
 const policies = ref<PolicyTemplate[]>([])
@@ -202,6 +205,28 @@ async function handleRemoveAssign(a: any) {
     ElMessage.success('已移除')
     await loadAssignments()
   } catch { ElMessage.error('移除失败') }
+}
+
+async function handleBackupAssign(a: any) {
+  // Trigger manual backup for a specific assigned client
+  if (a.type === 'client' && a.client_id) {
+    try {
+      await sendCommand(a.client_id, 'start_backup')
+      ElMessage.success('手动备份指令已发送')
+    } catch { ElMessage.error('发送失败，请确认客户端在线') }
+  } else if (a.type === 'group' && a.group_id) {
+    // For groups, send to all clients in that group
+    try {
+      const res = await getClients({ group_id: a.group_id, page_size: 500 })
+      let sent = 0
+      for (const c of res.items) {
+        try { await sendCommand(c.id, 'start_backup'); sent++ } catch { /* skip offline */ }
+      }
+      ElMessage.success(`已向 ${sent}/${res.items.length} 个客户端发送备份指令`)
+    } catch { ElMessage.error('获取分组客户端失败') }
+  } else {
+    ElMessage.warning('此分配类型暂不支持批量执行')
+  }
 }
 
 async function deletePolicy() {

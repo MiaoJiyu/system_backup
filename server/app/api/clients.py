@@ -18,7 +18,7 @@ router = APIRouter(prefix="/clients", tags=["客户端管理"])
 @router.get("")
 async def list_clients(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=500),
     search: str | None = None,
     group_id: int | None = None,
     tag_id: int | None = None,

@@ -76,6 +76,7 @@ app.include_router(system.router, prefix="/api/v1")
 app.include_router(auth.users_router, prefix="/api/v1")
 
 # Register WebSocket endpoints
-from app.websocket.router import websocket_endpoint
+from app.websocket.router import websocket_endpoint, ws_logs_endpoint
 
 app.add_api_websocket_route("/api/v1/ws", websocket_endpoint)
+app.add_api_websocket_route("/api/v1/ws/clients/{client_id}/logs", ws_logs_endpoint)

@@ -128,7 +128,16 @@ async def handle_log(ws: WebSocket, payload: dict, request_id: str | None):
                 message=entry.get("message", ""),
             )
             db.add(log_entry)
-        await db.commit()
+            await db.commit()
+            await db.refresh(log_entry)
+            # Push log entry to frontend viewers watching this client
+            await manager.broadcast_log(client.id, {
+                "id": log_entry.id,
+                "client_id": client.id,
+                "level": log_entry.level.value,
+                "message": log_entry.message,
+                "created_at": log_entry.created_at.isoformat() if log_entry.created_at else None,
+            })
 
 
 async def handle_auth(ws: WebSocket, payload: dict, request_id: str | None):

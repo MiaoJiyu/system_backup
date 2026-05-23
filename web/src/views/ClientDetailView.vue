@@ -5,6 +5,11 @@
         <ArrowLeft class="w-4 h-4" /> 返回
       </el-button>
       <h2 class="text-lg font-semibold text-gray-800">客户端详情</h2>
+      <div class="ml-auto flex gap-2">
+        <el-button v-if="client?.status === 'online'" type="primary" size="small" @click="handleManualBackup" :loading="backupLoading">
+          手动备份
+        </el-button>
+      </div>
     </div>
 
     <div class="card grid grid-cols-2 md:grid-cols-4 gap-4" v-if="client">
@@ -104,7 +109,7 @@
 import { ref, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft } from 'lucide-vue-next'
-import { getClient, getClientBackups, getEffectivePolicy, pushClientConfig } from '@/api/clients'
+import { getClient, getClientBackups, getEffectivePolicy, pushClientConfig, sendCommand } from '@/api/clients'
 import { useWebSocketStore } from '@/stores/websocket'
 import type { Client, BackupRecord } from '@/types'
 import { ElMessage } from 'element-plus'
@@ -119,6 +124,7 @@ const activeTab = ref('logs')
 const logContainer = ref<HTMLElement>()
 const editingPolicy = ref(false)
 const savingPolicy = ref(false)
+const backupLoading = ref(false)
 const policyForm = reactive<Record<string, any>>({
   backup_directories: [], backup_usb: true, incremental: true,
   schedule_type: 'manual', schedule_config: {}, encryption_enabled: true,
@@ -189,6 +195,19 @@ async function savePolicy() {
     ElMessage.error('保存失败')
   } finally {
     savingPolicy.value = false
+  }
+}
+
+async function handleManualBackup() {
+  if (!client.value) return
+  backupLoading.value = true
+  try {
+    await sendCommand(client.value.id, 'start_backup')
+    ElMessage.success('手动备份指令已发送')
+  } catch {
+    ElMessage.error('发送失败，请确认客户端在线')
+  } finally {
+    backupLoading.value = false
   }
 }
 </script>

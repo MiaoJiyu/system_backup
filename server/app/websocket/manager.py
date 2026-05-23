@@ -13,6 +13,8 @@ class ConnectionManager:
         self.connections: dict[str, dict] = {}
         # WebSocket object -> uuid (for disconnect tracking)
         self._ws_to_uuid: dict[int, str] = {}
+        # client_id -> set of WebSocket objects (for log streaming to frontend)
+        self._log_viewers: dict[int, set[WebSocket]] = {}
 
     async def connect(self, ws: WebSocket, uuid: str, ip: str = ""):
         await ws.accept()
@@ -37,6 +39,37 @@ class ConnectionManager:
                         await db.commit()
             except Exception:
                 pass
+        # Clean up log viewer entries for this WebSocket
+        for cid in list(self._log_viewers.keys()):
+            s = self._log_viewers[cid]
+            s.discard(ws)
+            if not s:
+                del self._log_viewers[cid]
+
+    # --- Log viewer (frontend) methods ---
+
+    def add_log_viewer(self, client_id: int, ws: WebSocket):
+        if client_id not in self._log_viewers:
+            self._log_viewers[client_id] = set()
+        self._log_viewers[client_id].add(ws)
+
+    def remove_log_viewer(self, client_id: int, ws: WebSocket):
+        if client_id in self._log_viewers:
+            self._log_viewers[client_id].discard(ws)
+
+    async def broadcast_log(self, client_id: int, log_entry: dict):
+        """Push a log entry to all frontend viewers watching this client."""
+        viewers = self._log_viewers.get(client_id, set())
+        dead: list[WebSocket] = []
+        for ws in viewers:
+            try:
+                await ws.send_text(json.dumps({"type": "client_log", "payload": log_entry}, default=str))
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            viewers.discard(ws)
+
+    # --- Existing methods below ---
 
     def get_uuid(self, ws: WebSocket) -> str | None:
         return self._ws_to_uuid.get(id(ws))
@@ -62,7 +95,7 @@ class ConnectionManager:
             await self.send_to_client(uuid, message)
 
     async def check_heartbeats(self):
-        """Mark clients as offline if they missed heartbeats."""
+        """Mark clients as offline if they missed heartbeats. Does NOT remove connections."""
         from sqlalchemy import select
         from app.database import AsyncSessionLocal
         from app.models.client import Client, ClientStatus
@@ -74,17 +107,9 @@ class ConnectionManager:
             for uuid, conn in list(self.connections.items()):
                 last_hb = conn.get("last_heartbeat")
                 if last_hb and (now - last_hb).total_seconds() > timeout_seconds:
-                    self.connections.pop(uuid, None)
-                    ws_id = None
-                    for wid, uid in list(self._ws_to_uuid.items()):
-                        if uid == uuid:
-                            ws_id = wid
-                            break
-                    if ws_id:
-                        self._ws_to_uuid.pop(ws_id, None)
                     result = await db.execute(select(Client).where(Client.uuid == uuid))
                     client = result.scalar_one_or_none()
-                    if client:
+                    if client and client.status != ClientStatus.offline:
                         client.status = ClientStatus.offline
                         await db.commit()
 

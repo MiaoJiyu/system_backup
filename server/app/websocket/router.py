@@ -21,12 +21,14 @@ async def websocket_endpoint(ws: WebSocket, uuid: str = Query(...)):
 async def ws_logs_endpoint(ws: WebSocket, client_id: int):
     """WebSocket endpoint for log streaming to web frontend."""
     await ws.accept()
+    manager.add_log_viewer(client_id, ws)
     try:
         while True:
+            # Keep connection alive, listen for pings (or just wait for disconnect)
             data = await ws.receive_text()
-            # Echo back - the frontend will filter by client_id
-            await ws.send_text(data)
     except WebSocketDisconnect:
         pass
     except Exception:
         pass
+    finally:
+        manager.remove_log_viewer(client_id, ws)

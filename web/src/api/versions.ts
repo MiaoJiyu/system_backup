@@ -6,9 +6,7 @@ export function getVersions(params?: Record<string, any>): Promise<PaginatedResp
 }
 
 export function uploadVersion(formData: FormData): Promise<ClientVersion> {
-  return request.post('/versions', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
+  return request.post('/versions', formData)
 }
 
 export function updateVersion(id: number, data: Partial<ClientVersion>): Promise<ClientVersion> {
